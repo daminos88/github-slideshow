@@ -94,7 +94,7 @@ function reducer(s: AppState, a: Action): AppState {
        }
        return {...s, agentLog: newLog};
     }
-    case "ADD_VS_PAGE": return {...s, vsPages: [...s.vsPages, a.p]};
+    case "ADD_VS_PAGE": return {...s, vsPages: s.vsPages.includes(a.p) ? s.vsPages : [...s.vsPages, a.p]};
     case "TOGGLE_SENTINEL": return {...s, sentinelOpen:!s.sentinelOpen};
     case "SIGN_OFF": {
        if (s.signedPhases.includes(s.currentPhase)) return s;
