@@ -7,7 +7,7 @@
 import { useState, useEffect, useRef, useReducer, createContext, useContext } from "react";
 import { motion, AnimatePresence, useInView } from "motion/react";
 import ReactMarkdown from 'react-markdown';
-import { Send, X, Terminal, Loader2 } from "lucide-react";
+import { Send, X, Terminal, Loader2, Menu, User, Key, Palette, CreditCard, Moon, Sun, Lock, Save, ChevronRight } from "lucide-react";
 import './App.css';
 
 // ─── LANDING & EDITOR DATA ───────────────────────────────────
@@ -49,6 +49,18 @@ interface LogEntry {
   ts: number;
 }
 
+interface Integrations {
+  gemini: string;
+  divine: string;
+  gpt: string;
+  kimi: string;
+}
+
+interface ProjectManifest {
+  name: string;
+  saved: boolean;
+}
+
 interface AppState {
   currentPhase: number;
   activeAgent: string;
@@ -59,6 +71,12 @@ interface AppState {
   signedPhases: number[];
   agentLog: LogEntry[];
   vsPages: string[];
+  tier: 'FREE' | 'PRO' | 'ENTERPRISE';
+  integrations: Integrations;
+  projectManifest: ProjectManifest;
+  theme: 'LIGHT' | 'DARK';
+  isMenuOpen: boolean;
+  showUpgradeModal: boolean;
 }
 
 type Action =
@@ -70,7 +88,14 @@ type Action =
   | { type: "UPDATE_LAST_LOG"; p: LogEntry }
   | { type: "ADD_VS_PAGE"; p: string }
   | { type: "TOGGLE_SENTINEL" }
-  | { type: "SIGN_OFF" };
+  | { type: "SIGN_OFF" }
+  | { type: "TOGGLE_MENU" }
+  | { type: "SET_INTEGRATION"; key: keyof Integrations; value: string }
+  | { type: "SET_PROJECT_NAME"; p: string }
+  | { type: "SAVE_PROJECT" }
+  | { type: "SET_TIER"; p: 'FREE' | 'PRO' | 'ENTERPRISE' }
+  | { type: "TOGGLE_THEME" }
+  | { type: "UPGRADE_MODAL"; p: boolean };
 
 const BlueprintCtx = createContext<{ state: AppState; dispatch: React.Dispatch<Action> } | null>(null);
 
@@ -78,6 +103,12 @@ const initState: AppState = {
   currentPhase:1, activeAgent:"ARCHITECT", viewMode:"HOMEWORK",
   isSignedOff:false, sentinelOpen:false, homeworkText: HOMEWORK_DATA[1],
   signedPhases:[], agentLog:[], vsPages: ['SaaS-A vs AgileArchitect', 'SaaS-B Alternative', 'Top 10 Growth Tools'],
+  tier: 'FREE',
+  integrations: { gemini: '', divine: '', gpt: '', kimi: '' },
+  projectManifest: { name: '', saved: false },
+  theme: 'LIGHT',
+  isMenuOpen: false,
+  showUpgradeModal: false,
 };
 
 function reducer(s: AppState, a: Action): AppState {
@@ -98,9 +129,19 @@ function reducer(s: AppState, a: Action): AppState {
     case "TOGGLE_SENTINEL": return {...s, sentinelOpen:!s.sentinelOpen};
     case "SIGN_OFF": {
        if (s.signedPhases.includes(s.currentPhase)) return s;
+       if (s.currentPhase === 2 && s.tier === 'FREE') {
+          return {...s, showUpgradeModal: true};
+       }
        const nextPhase = Math.min(s.currentPhase + 1, 9);
        return {...s, isSignedOff:true, signedPhases:[...s.signedPhases, s.currentPhase], currentPhase: nextPhase, homeworkText: HOMEWORK_DATA[nextPhase] || ""};
     }
+    case "TOGGLE_MENU": return {...s, isMenuOpen: !s.isMenuOpen};
+    case "SET_INTEGRATION": return {...s, integrations: {...s.integrations, [a.key]: a.value}};
+    case "SET_PROJECT_NAME": return {...s, projectManifest: {...s.projectManifest, name: a.p}};
+    case "SAVE_PROJECT": return {...s, projectManifest: {...s.projectManifest, saved: s.projectManifest.name.trim().length > 0}};
+    case "SET_TIER": return {...s, tier: a.p, showUpgradeModal: false};
+    case "TOGGLE_THEME": return {...s, theme: s.theme === 'LIGHT' ? 'DARK' : 'LIGHT'};
+    case "UPGRADE_MODAL": return {...s, showUpgradeModal: a.p};
     default: return s;
   }
 }
@@ -114,6 +155,202 @@ function useBlueprintCtx() {
   const ctx = useContext(BlueprintCtx);
   if (!ctx) throw new Error("Missing BlueprintProvider");
   return ctx;
+}
+
+// ─── HAMBURGER MENU ───────────────────────────────────────────
+function HamburgerMenu() {
+  const {state, dispatch} = useBlueprintCtx();
+  const [activeTab, setActiveTab] = useState<'profile'|'integrations'|'parameters'|'pricing'>('profile');
+  const isFree = state.tier === 'FREE';
+
+  return (
+    <AnimatePresence>
+      {state.isMenuOpen && (
+        <>
+          <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}} onClick={()=>dispatch({type:"TOGGLE_MENU"})} className="fixed inset-0 bg-neutral-900/30 z-[200] backdrop-blur-sm"/>
+          <motion.div initial={{x:"-100%"}} animate={{x:0}} exit={{x:"-100%"}} transition={{type:"spring", damping:30, stiffness:300}} className="fixed left-0 top-0 bottom-0 w-[380px] bg-white z-[210] shadow-2xl flex flex-col border-r border-neutral-100">
+            <div className="p-6 border-b border-neutral-100 flex justify-between items-center">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 rounded-xl bg-emerald-500 flex items-center justify-center text-white text-sm font-black">A</div>
+                <div>
+                  <div className="text-sm font-black tracking-tight">COMMAND CENTER</div>
+                  <div className="text-[9px] font-bold text-neutral-400 uppercase tracking-widest">{state.tier} TIER</div>
+                </div>
+              </div>
+              <button onClick={()=>dispatch({type:"TOGGLE_MENU"})} className="p-2 hover:bg-neutral-100 rounded-xl transition-colors">
+                <X size={16} className="text-neutral-400"/>
+              </button>
+            </div>
+
+            <div className="flex border-b border-neutral-100">
+              {([
+                {id:'profile' as const, icon: User, label:'Profile'},
+                {id:'integrations' as const, icon: Key, label:'Keys'},
+                {id:'parameters' as const, icon: Palette, label:'Params'},
+                {id:'pricing' as const, icon: CreditCard, label:'Pricing'},
+              ]).map(tab => (
+                <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`flex-1 py-3 flex flex-col items-center gap-1 text-[9px] font-bold uppercase tracking-widest transition-all border-b-2 ${activeTab===tab.id ? 'border-emerald-500 text-emerald-600 bg-emerald-50/50' : 'border-transparent text-neutral-400 hover:text-neutral-600'}`}>
+                  <tab.icon size={14}/>
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6">
+              {activeTab === 'profile' && (
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2 block">Username</label>
+                    <input className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" placeholder="architect_user" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2 block">Password Reset</label>
+                    <input type="password" className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" placeholder="••••••••" />
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-neutral-50 rounded-2xl border border-neutral-100">
+                    <div className="flex items-center gap-3">
+                      {state.theme === 'LIGHT' ? <Sun size={16} className="text-amber-500"/> : <Moon size={16} className="text-indigo-400"/>}
+                      <span className="text-[11px] font-bold text-neutral-600">{state.theme === 'LIGHT' ? 'Paper-White Mode' : 'Obsidian Mode'}</span>
+                    </div>
+                    <button onClick={()=>dispatch({type:"TOGGLE_THEME"})} className={`w-10 h-6 rounded-full transition-all relative ${state.theme==='DARK' ? 'bg-emerald-500' : 'bg-neutral-300'}`}>
+                      <div className={`w-4 h-4 bg-white rounded-full absolute top-1 transition-all shadow-sm ${state.theme==='DARK' ? 'left-5' : 'left-1'}`}/>
+                    </button>
+                  </div>
+                  <button className="w-full py-3 bg-neutral-900 text-white rounded-xl font-bold text-[11px] tracking-widest uppercase hover:bg-red-600 transition-all">Sign Out</button>
+                </div>
+              )}
+
+              {activeTab === 'integrations' && (
+                <div className="space-y-5">
+                  <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+                    <p className="text-[10px] font-bold text-amber-700">{isFree ? 'Upgrade to PRO to unlock LLM integrations.' : 'Enter your API keys below. Keys are stored locally.'}</p>
+                  </div>
+                  {(Object.keys(state.integrations) as Array<keyof Integrations>).map(key => (
+                    <div key={key}>
+                      <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2 block flex items-center gap-2">
+                        <Key size={10}/> {key.toUpperCase()} API Key
+                        {isFree && <Lock size={10} className="text-neutral-300"/>}
+                      </label>
+                      <input
+                        type="password"
+                        disabled={isFree}
+                        value={state.integrations[key]}
+                        onChange={(e)=>dispatch({type:"SET_INTEGRATION", key, value: e.target.value})}
+                        className={`w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all ${isFree ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        placeholder={isFree ? 'PRO required' : `sk-${key}-...`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {activeTab === 'parameters' && (
+                <div className="space-y-6">
+                  <div>
+                    <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2 block">Brand Name</label>
+                    <input className="w-full bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-3 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all" defaultValue="Agile Architect" />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-2 block">Primary Color</label>
+                    <div className="flex gap-3">
+                      {['#10B981','#3B82F6','#8B5CF6','#F59E0B','#EF4444','#EC4899'].map(c => (
+                        <button key={c} className="w-8 h-8 rounded-xl border-2 border-neutral-200 hover:scale-110 transition-transform" style={{backgroundColor:c}}/>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="p-4 bg-neutral-50 rounded-2xl border border-neutral-100">
+                    <label className="text-[10px] font-black text-neutral-400 uppercase tracking-widest mb-3 block flex items-center gap-2">
+                      <Save size={10}/> Project File
+                    </label>
+                    <div className="flex gap-2">
+                      <input
+                        value={state.projectManifest.name}
+                        onChange={(e)=>dispatch({type:"SET_PROJECT_NAME", p: e.target.value})}
+                        className="flex-1 bg-white border border-neutral-200 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all"
+                        placeholder="my-saas-project"
+                      />
+                      <button
+                        onClick={()=>dispatch({type:"SAVE_PROJECT"})}
+                        disabled={!state.projectManifest.name.trim()}
+                        className="px-4 py-3 bg-emerald-500 text-white rounded-xl font-bold text-[10px] uppercase tracking-wider hover:bg-emerald-600 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        Save
+                      </button>
+                    </div>
+                    {state.projectManifest.saved && (
+                      <div className="mt-2 text-[10px] font-bold text-emerald-600 flex items-center gap-1">
+                        <span>&#10003;</span> Project "{state.projectManifest.name}" saved
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {activeTab === 'pricing' && (
+                <div className="space-y-4">
+                  {[
+                    {tier: 'FREE' as const, price: '$0', label: 'Explorer', features: ['2 Phases', 'Demo Mode', 'Community Support'], current: state.tier === 'FREE'},
+                    {tier: 'PRO' as const, price: '$49', label: 'Professional', features: ['All 9 Phases', 'LLM Integration', '4 API Keys', 'Priority Support'], current: state.tier === 'PRO'},
+                    {tier: 'ENTERPRISE' as const, price: '$199', label: 'Enterprise', features: ['Unlimited Phases', 'SSO / RBAC', 'Custom Agents', 'Dedicated Support', 'White-Label'], current: state.tier === 'ENTERPRISE'},
+                  ].map(plan => (
+                    <div key={plan.tier} className={`p-6 rounded-2xl border-2 transition-all ${plan.current ? 'border-emerald-500 bg-emerald-50/30 shadow-lg shadow-emerald-100' : 'border-neutral-100 hover:border-neutral-200'}`}>
+                      <div className="flex justify-between items-start mb-3">
+                        <div>
+                          <div className="text-[10px] font-black text-neutral-400 uppercase tracking-widest">{plan.label}</div>
+                          <div className="text-2xl font-black tracking-tight">{plan.price}<span className="text-xs font-normal text-neutral-400">/mo</span></div>
+                        </div>
+                        {plan.current && <span className="px-2 py-1 bg-emerald-500 text-white text-[9px] font-bold rounded-full uppercase">Current</span>}
+                      </div>
+                      <div className="space-y-2 mb-4">
+                        {plan.features.map(f => (
+                          <div key={f} className="flex items-center gap-2 text-[11px] text-neutral-600">
+                            <ChevronRight size={10} className="text-emerald-500"/> {f}
+                          </div>
+                        ))}
+                      </div>
+                      {!plan.current && (
+                        <button onClick={()=>dispatch({type:"SET_TIER", p: plan.tier})} className="w-full py-2.5 bg-neutral-900 text-white rounded-xl font-bold text-[10px] tracking-widest uppercase hover:bg-emerald-600 transition-all">
+                          {plan.tier === 'FREE' ? 'Downgrade' : 'Upgrade'}
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        </>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ─── UPGRADE MODAL ────────────────────────────────────────────
+function UpgradeModal() {
+  const {state, dispatch} = useBlueprintCtx();
+  if (!state.showUpgradeModal) return null;
+  return (
+    <div className="fixed inset-0 z-[300] flex items-center justify-center">
+      <motion.div initial={{opacity:0}} animate={{opacity:1}} className="absolute inset-0 bg-neutral-900/50 backdrop-blur-sm" onClick={()=>dispatch({type:"UPGRADE_MODAL", p:false})}/>
+      <motion.div initial={{opacity:0, scale:0.9}} animate={{opacity:1, scale:1}} className="relative bg-white rounded-3xl p-10 max-w-md w-full mx-4 shadow-2xl border border-neutral-100">
+        <div className="text-center">
+          <div className="w-16 h-16 bg-amber-100 rounded-2xl flex items-center justify-center mx-auto mb-6">
+            <Lock size={28} className="text-amber-600"/>
+          </div>
+          <h3 className="text-2xl font-black tracking-tight mb-2">Phase 2 Ceiling</h3>
+          <p className="text-sm text-neutral-500 mb-8 leading-relaxed">Free tier is limited to Phases 1-2. Upgrade to PRO to unlock all 9 phases, LLM integrations, and advanced features.</p>
+          <div className="flex gap-3">
+            <button onClick={()=>dispatch({type:"UPGRADE_MODAL", p:false})} className="flex-1 py-3 border border-neutral-200 rounded-xl font-bold text-[11px] text-neutral-600 uppercase tracking-widest hover:bg-neutral-50 transition-all">
+              Stay Free
+            </button>
+            <button onClick={()=>{dispatch({type:"SET_TIER", p:'PRO'}); dispatch({type:"TOGGLE_MENU"});}} className="flex-1 py-3 bg-emerald-500 text-white rounded-xl font-bold text-[11px] uppercase tracking-widest hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-100">
+              Upgrade to PRO
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
 }
 
 // ─── COMPONENTS ───────────────────────────────────────────────
@@ -186,7 +423,16 @@ function AgentSentinel({mobile=false}: {mobile?: boolean}) {
       </div>
 
       <div ref={scrollRef} className="flex-1 overflow-y-auto p-4 space-y-4 bg-neutral-50/50">
-        {state.agentLog.length === 0 && (
+        {!state.projectManifest.saved && state.agentLog.length === 0 && (
+           <div className="h-full flex flex-col items-center justify-center text-center p-8">
+              <div className="w-16 h-16 bg-amber-50 rounded-2xl flex items-center justify-center mb-4">
+                <Lock size={28} className="text-amber-500"/>
+              </div>
+              <p className="text-sm font-black text-neutral-700 mb-1">Integration Required</p>
+              <p className="text-[11px] text-neutral-400 max-w-[220px] leading-relaxed">Open the menu and save a project name to unlock the terminal.</p>
+           </div>
+        )}
+        {state.projectManifest.saved && state.agentLog.length === 0 && (
            <div className="h-full flex flex-col items-center justify-center text-center opacity-40 p-8">
               <Terminal size={32} className="mb-4 text-neutral-300"/>
               <p className="text-xs font-medium text-neutral-400">System Ready. Awaiting Input.</p>
@@ -258,14 +504,14 @@ function AgentSentinel({mobile=false}: {mobile?: boolean}) {
 
       <form onSubmit={handleQuery} className="p-3 border-t border-neutral-100 bg-white flex gap-2">
         <input 
-          value={input}
+          value={state.projectManifest.saved ? input : ''}
           onChange={(e) => setInput(e.target.value)}
-          className="flex-1 bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-2.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all placeholder:text-neutral-400 font-medium" 
-          placeholder="Command the architect..."
-          disabled={isTyping}
+          className={`flex-1 bg-neutral-50 border border-neutral-200 rounded-xl px-4 py-2.5 text-[12px] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition-all placeholder:text-neutral-400 font-medium ${!state.projectManifest.saved ? 'opacity-50 cursor-not-allowed' : ''}`}
+          placeholder={state.projectManifest.saved ? 'Command the architect...' : 'Save project to unlock terminal...'}
+          disabled={isTyping || !state.projectManifest.saved}
         />
         <button 
-          disabled={!input.trim() || isTyping}
+          disabled={!input.trim() || isTyping || !state.projectManifest.saved}
           className="bg-emerald-500 text-white w-10 h-10 flex items-center justify-center rounded-xl shadow-lg shadow-emerald-100 disabled:opacity-50 disabled:shadow-none hover:bg-emerald-600 transition-all"
         >
            {isTyping ? <Loader2 size={16} className="animate-spin"/> : <Send size={16} className="ml-0.5"/>}
@@ -325,12 +571,25 @@ function EditorLayout() {
      }
   };
 
+  const isProjectReady = state.projectManifest.saved;
+
   return (
     <div className="h-screen flex bg-white overflow-hidden">
+      <HamburgerMenu />
+      <UpgradeModal />
       <div className="flex-1 flex flex-col">
         <header className="h-14 border-b border-neutral-100 flex items-center justify-between px-6">
-           <span className="font-bold text-[13px] tracking-tight text-neutral-400">PROJECT / <span className="text-neutral-900">NEW_SAAS</span></span>
-           <button className="md:hidden text-emerald-500 font-bold text-xs" onClick={()=>dispatch({type:"TOGGLE_SENTINEL"})}>SENTINEL</button>
+           <div className="flex items-center gap-3">
+             <button onClick={()=>dispatch({type:"TOGGLE_MENU"})} className="p-2 hover:bg-neutral-100 rounded-xl transition-colors">
+               <Menu size={18} className="text-neutral-500"/>
+             </button>
+             <span className="font-bold text-[13px] tracking-tight text-neutral-400">PROJECT / <span className="text-neutral-900">{isProjectReady ? state.projectManifest.name.toUpperCase() : 'UNSAVED'}</span></span>
+             {!isProjectReady && <span className="px-2 py-0.5 bg-amber-100 text-amber-700 text-[9px] font-bold rounded-full uppercase">Save project to unlock</span>}
+           </div>
+           <div className="flex items-center gap-3">
+             <span className="text-[9px] font-bold text-neutral-300 uppercase tracking-widest">{state.tier} tier</span>
+             <button className="md:hidden text-emerald-500 font-bold text-xs" onClick={()=>dispatch({type:"TOGGLE_SENTINEL"})}>SENTINEL</button>
+           </div>
         </header>
         <main className="flex-1 p-6 bg-white flex gap-6 overflow-hidden">
            <div className="w-64 flex flex-col gap-2 overflow-y-auto pr-2 shrink-0">
