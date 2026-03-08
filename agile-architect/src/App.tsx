@@ -97,6 +97,7 @@ function reducer(s: AppState, a: Action): AppState {
     case "ADD_VS_PAGE": return {...s, vsPages: [...s.vsPages, a.p]};
     case "TOGGLE_SENTINEL": return {...s, sentinelOpen:!s.sentinelOpen};
     case "SIGN_OFF": {
+       if (s.signedPhases.includes(s.currentPhase)) return s;
        const nextPhase = Math.min(s.currentPhase + 1, 9);
        return {...s, isSignedOff:true, signedPhases:[...s.signedPhases, s.currentPhase], currentPhase: nextPhase, homeworkText: HOMEWORK_DATA[nextPhase] || ""};
     }
@@ -160,8 +161,9 @@ function AgentSentinel({mobile=false}: {mobile?: boolean}) {
         })
       });
       
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      dispatch({type:"PUSH_LOG", p:{agent:agentName, msg:data.message, ts:Date.now()}});
+      dispatch({type:"PUSH_LOG", p:{agent:agentName, msg:data.message || "No response from agent.", ts:Date.now()}});
     } catch {
       dispatch({type:"PUSH_LOG", p:{agent:"SYSTEM", msg:"Agent is in demo mode. No backend connected.", ts:Date.now()}});
     } finally {
