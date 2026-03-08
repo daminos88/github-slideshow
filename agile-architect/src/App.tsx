@@ -75,8 +75,8 @@ type Action =
 const BlueprintCtx = createContext<{ state: AppState; dispatch: React.Dispatch<Action> } | null>(null);
 
 const initState: AppState = {
-  currentPhase:9, activeAgent:"GROWTH", viewMode:"HOMEWORK",
-  isSignedOff:false, sentinelOpen:false, homeworkText: HOMEWORK_DATA[9],
+  currentPhase:1, activeAgent:"ARCHITECT", viewMode:"HOMEWORK",
+  isSignedOff:false, sentinelOpen:false, homeworkText: HOMEWORK_DATA[1],
   signedPhases:[], agentLog:[], vsPages: ['SaaS-A vs AgileArchitect', 'SaaS-B Alternative', 'Top 10 Growth Tools'],
 };
 
@@ -96,7 +96,10 @@ function reducer(s: AppState, a: Action): AppState {
     }
     case "ADD_VS_PAGE": return {...s, vsPages: [...s.vsPages, a.p]};
     case "TOGGLE_SENTINEL": return {...s, sentinelOpen:!s.sentinelOpen};
-    case "SIGN_OFF": return {...s, isSignedOff:true, signedPhases:[...s.signedPhases, s.currentPhase], currentPhase:Math.min(s.currentPhase+1, 9)};
+    case "SIGN_OFF": {
+       const nextPhase = Math.min(s.currentPhase + 1, 9);
+       return {...s, isSignedOff:true, signedPhases:[...s.signedPhases, s.currentPhase], currentPhase: nextPhase, homeworkText: HOMEWORK_DATA[nextPhase] || ""};
+    }
     default: return s;
   }
 }
@@ -844,7 +847,10 @@ if (token.phase < ${state.currentPhase})
                            <div className="text-[10px] font-black text-emerald-500 tracking-[0.4em] uppercase animate-pulse">Phase 08 // Final Dominion</div>
                            <h2 className="text-5xl font-black tracking-tighter text-neutral-900 uppercase leading-none">SEO Mastery</h2>
                         </div>
-                        <button onClick={() => dispatch({ type: "PUSH_LOG", p: { agent: "SYSTEM", msg: "8-Phase Lifecycle Complete. Scaling Mode Active.", ts: Date.now() }})} className="px-8 py-3 bg-neutral-900 text-white rounded-full font-bold text-[10px] tracking-widest uppercase hover:bg-emerald-500 transition-all shadow-xl">
+                        <button onClick={() => {
+                             dispatch({type: "PUSH_LOG", p: {agent: "SYSTEM", msg: "8-Phase Lifecycle Complete. Scaling Mode Active.", ts: Date.now()}});
+                             setTimeout(() => dispatch({type: "SIGN_OFF"}), 800);
+                          }} className="px-8 py-3 bg-neutral-900 text-white rounded-full font-bold text-[10px] tracking-widest uppercase hover:bg-emerald-500 transition-all shadow-xl">
                            Final Sign-Off & Scale →
                         </button>
                      </header>
